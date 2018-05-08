@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Sirupsen/logrus"
 	auth_pb "github.com/arsonistgopher/junos-gnmi-testclient/authentication"
 	gnmipb "github.com/arsonistgopher/junos-gnmi-testclient/proto/gnmi"
 	"golang.org/x/crypto/ssh/terminal"
@@ -30,10 +29,11 @@ func main() {
 	var host = flag.String("host", "127.0.0.1", "Set host to IP address or FQDN DNS record")
 	var resource = flag.String("resource", "/interfaces", "Set resource to resource path")
 	var user = flag.String("user", "testuser", "Set to username")
-	var port = flag.String("port", "50051", "Set to Server Port")
+	var port = flag.String("port", "32767", "Set to Server Port, defaults to 32767")
 	var cid = flag.String("cid", "1", "Set to Client ID")
-	var certDir = flag.String("certdir", "", "Directory with clientCert.crt, clientKey.crt, CA.crt")
+	var certDir = flag.String("certdir", "", "Directory with client.crt, client.key, CA.crt")
 	var encoding = flag.String("enc", "JSON", "Encoding, either ASCII or JSON as of 18.1")
+	var shmodels = flag.Bool("shmodels", false, "If set to true, then show supported models, else, do not")
 	flag.Parse()
 
 	// Set host
@@ -97,7 +97,7 @@ func main() {
 
 	conn, err := grpc.Dial(hostandport, opts...)
 	if err != nil {
-		logrus.Fatalf("Error opening grpc.Dial(): %v", err)
+		log.Fatalf("Error opening grpc.Dial(): %v", err)
 	}
 	// lazy close
 	defer conn.Close()
@@ -107,11 +107,11 @@ func main() {
 	dat, err := l.LoginCheck(context.Background(), &auth_pb.LoginRequest{UserName: *user, Password: password, ClientId: *cid})
 
 	if err != nil {
-		logrus.Fatalf("Could not login: %v", err)
+		log.Fatalf("Could not login: %v", err)
 	}
 
 	if dat.Result == false {
-		logrus.Fatalf("LoginCheck failed\n")
+		log.Fatalf("LoginCheck failed\n")
 	}
 
 	// Let's get a list of capabilities
@@ -122,19 +122,22 @@ func main() {
 	resp, err := c.Capabilities(ctx, cap)
 
 	if err != nil {
-		logrus.Fatalf("Error getting capabilities: %v", err)
+		log.Fatalf("Error getting capabilities: %v", err)
 	}
 
 	models := resp.GetSupportedModels()
 	encodings := resp.GetSupportedEncodings()
 	gnmiversion := resp.GetGNMIVersion()
 
+	// We make the switch from log to fmt.Print due to it being data output vs general app logging
 	fmt.Println("----- VERSION -----")
 	fmt.Println(gnmiversion)
 
-	fmt.Println("----- MODELS -----")
-	for _, m := range models {
-		fmt.Println(m)
+	if *shmodels {
+		fmt.Println("----- MODELS -----")
+		for _, m := range models {
+			fmt.Println(m)
+		}
 	}
 
 	fmt.Println("----- ENCODINGS SUPPORTED -----")
@@ -145,13 +148,13 @@ func main() {
 	gpath, err := xpathToGNMIpath(*resource)
 
 	if err != nil {
-		logrus.Fatalf("Error: %v", err)
+		log.Fatalf("Error: %v", err)
 	}
 
 	pp, err := StringToPath(pathToString(gpath), StructuredPath, StringSlicePath)
 
 	if err != nil {
-		logrus.Fatalf("Error: %v", err)
+		log.Fatalf("Error: %v", err)
 	}
 
 	// Figure out what encoding we're asking for from command line arguments
@@ -179,7 +182,7 @@ func main() {
 	resp2, err := c.Get(ctx, getrequest)
 
 	if err != nil {
-		logrus.Fatalf("Error: %v", err)
+		log.Fatalf("Error: %v", err)
 	}
 
 	fmt.Println("----- GET DATA -----")
